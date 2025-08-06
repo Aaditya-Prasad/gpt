@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpt"
+version = "0.0.1"
+requires-python = ">=3.12"
+
+dependencies = [
+    "openai",
+    "torch>=2.7.0",
+    "transformers>=4.55.0",
+]
