@@ -8,18 +8,28 @@
 # Standard SLURM output/error streams are also redirected to `slurm_logs`.
 # -----------------------------------------------------------------------------
 #SBATCH --job-name=generate_120b_lmsys
-#SBATCH --nodes=8               # total number of nodes
-#SBATCH --ntasks-per-node=1     # one task per node
+#SBATCH --nodes=1               # single node
+#SBATCH --ntasks-per-node=8     # one task per GPU
 #SBATCH --gres=gpu:8            # 8 GPUs per node
-#SBATCH --cpus-per-task=16      # adjust as appropriate for your cluster
+#SBATCH --cpus-per-task=4       # adjust as appropriate for your cluster
 #SBATCH --time=24:00:00         # adjust wall-time as needed
 #SBATCH --output=slurm_logs/%x_%j.out
 #SBATCH --error=slurm_logs/%x_%j.err
 
 set -euo pipefail
 
-# Ensure the logging directory exists
-mkdir -p slurm_logs
+# Resolve path to env.sh in submission directory and load environment variables
+ENV_FILE="${SLURM_SUBMIT_DIR:-$(pwd)}/env.sh"
+source "$ENV_FILE"
+export ENV_FILE
+
+# Ensure the logging directory exists in submit dir
+mkdir -p "${SLURM_SUBMIT_DIR:-$(pwd)}/slurm_logs"
+
+# Create a per-job log directory
+JOB_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}/slurm_logs/${SLURM_JOB_ID:-manual}"
+mkdir -p "$JOB_DIR"
+export JOB_DIR
 
 # -----------------------------------------------------------------------------
 # Launch one independent task on each node.
@@ -29,15 +39,24 @@ mkdir -p slurm_logs
 # experiment name for the run on that node.
 # -----------------------------------------------------------------------------
 
-srun --ntasks=8 --ntasks-per-node=1 \
+srun --ntasks=8 --ntasks-per-node=8 \
      bash -c '
-        NODE_ID=${SLURM_PROCID}
-        CMD="python generate.py --model 120b --data_path inputs/lmsys-filtered_${NODE_ID}.json -e 120b-lmsys-default_${NODE_ID} -t 8"
-        echo "[$(date)] Running on node $NODE_ID: $CMD" >&2
-        eval $CMD &> slurm_logs/generate_${NODE_ID}.log
+        source "$ENV_FILE"
+        cd "$SLURM_SUBMIT_DIR/gpt"
+        GPU_ID=${SLURM_LOCALID:-${SLURM_PROCID}}
+        export CUDA_VISIBLE_DEVICES=${GPU_ID}
+        CMD="python generate.py --model 120b --data_path inputs/lmsys-filtered_${GPU_ID}.json -e 120b-lmsys-reasoning=med_${GPU_ID} -t 1 -r medium"
+        echo "[$(date)] Running on GPU ${GPU_ID}: $CMD" >&2
+        eval $CMD &> ${JOB_DIR}/generate_${GPU_ID}.log
      '
 
 # Wait for all background tasks to finish before exiting.
 wait
 
-printf "\nAll per-node generate.py jobs have completed.\n"
+printf "\nAll per-gpu generate.py jobs have completed.\n"
+
+# Move SLURM output files into the per-job directory to avoid clutter
+OUT_FILE="${SLURM_SUBMIT_DIR:-$(pwd)}/slurm_logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}.out"
+ERR_FILE="${SLURM_SUBMIT_DIR:-$(pwd)}/slurm_logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}.err"
+if [ -f "$OUT_FILE" ]; then mv "$OUT_FILE" "$JOB_DIR/"; fi
+if [ -f "$ERR_FILE" ]; then mv "$ERR_FILE" "$JOB_DIR/"; fi

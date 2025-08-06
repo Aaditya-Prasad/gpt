@@ -122,7 +122,7 @@ def main(args):
 
     prompts = json.load(open(args.data_path))
     N = len(prompts)
-    token_ids = [get_token_ids(p["prompt"], encoding) for p in prompts]
+    token_ids = [get_token_ids(p["prompt"], encoding, reasoning=args.reasoning) for p in prompts]
 
 
     gc = GenerationConfig() if args.config == "None" else GenerationConfig.from_yaml(args.config)
@@ -183,6 +183,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", help="Path to generation config YAML", default="None")
     parser.add_argument("-p", "--partition_size", help="Partition size", type=int, default=1024)
     parser.add_argument("-t", "--tp", help="Tensor parallel size", type=int, default=1)
+    parser.add_argument("-r", "--reasoning", help="Reasoning effort", type=str, default="low")
     args = parser.parse_args()
 
     main(args)

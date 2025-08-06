@@ -2,4 +2,4 @@ gpt/inputs/
 outputs
 vllm_logs/
 gpt/__pycache__/
-
+slurm_logs/
